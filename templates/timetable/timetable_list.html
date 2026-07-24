@@ -1,0 +1,215 @@
+{% extends 'base.html' %}
+
+{% block title %}Examination Schedule | College Exam Seating Arrangement System{% endblock %}
+
+{% block breadcrumbs %}
+<li class="breadcrumb-item"><a href="{% url 'dashboard' %}" class="text-dark-blue text-decoration-none">Home</a></li>
+<li class="breadcrumb-item active" aria-current="page">Schedule</li>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+        <h4 class="fw-bold text-dark-blue mb-0"><i class="bi bi-calendar-event-fill text-accent me-2"></i>Examination Schedule Timetable</h4>
+        <div class="d-flex">
+            <a href="{% url 'print_report' report_type='timetable' %}" target="_blank" class="btn btn-outline-dark-blue me-2">
+                <i class="bi bi-printer me-2"></i>Print Schedule (A4)
+            </a>
+            {% if user.profile.role in 'ADMIN EXAM_CONTROLLER' %}
+            <button type="button" class="btn btn-dark-blue text-white" data-bs-toggle="modal" data-bs-target="#scheduleExamModal">
+                <i class="bi bi-plus-circle me-2"></i>Schedule Exam Slot
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-0 py-3">
+        <h5 class="fw-bold mb-0 text-dark-blue"><i class="bi bi-list-task text-primary me-2"></i>Scheduled Examination Time Slots</h5>
+    </div>
+    <div class="card-body p-0">
+        {% if entries %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size: 13px;">
+                <thead class="table-light text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">
+                    <tr>
+                        <th class="ps-3">Exam Session</th>
+                        <th>Subject Details</th>
+                        <th>Date & Session</th>
+                        <th>Exam Time</th>
+                        <th>Attachment Document</th>
+                        {% if user.profile.role in 'ADMIN EXAM_CONTROLLER' %}
+                        <th class="text-end pe-3">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr>
+                        <td class="ps-3 fw-bold text-dark-blue">{{ entry.exam.name }} ({{ entry.exam.code }})</td>
+                        <td>
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis mb-1">{{ entry.subject.subject_code }}</span>
+                            <div class="fw-bold text-dark-blue">{{ entry.subject.subject_name }}</div>
+                            <small class="text-muted">Dept: {{ entry.subject.department.code }} - Sem: {{ entry.subject.semester }}</small>
+                        </td>
+                        <td>
+                            <div class="fw-semibold"><i class="bi bi-calendar3 me-1"></i>{{ entry.exam_date|date:"d-M-Y" }}</div>
+                            <span class="badge {% if entry.session == 'Morning' %}bg-warning-subtle text-warning-emphasis{% else %}bg-primary-subtle text-primary-emphasis{% endif %} mt-1">{{ entry.session }}</span>
+                        </td>
+                        <td>
+                            <div><i class="bi bi-clock me-1 text-muted"></i>{{ entry.start_time|time:"H:i" }} - {{ entry.end_time|time:"H:i" }}</div>
+                        </td>
+                        <td>
+                            {% if entry.attachment %}
+                            <a href="{{ entry.attachment.url }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                <i class="bi bi-file-earmark-arrow-down me-1"></i> Download
+                            </a>
+                            {% else %}
+                            <span class="text-muted italic small">None</span>
+                            {% endif %}
+                        </td>
+                        {% if user.profile.role in 'ADMIN EXAM_CONTROLLER' %}
+                        <td class="text-end pe-3">
+                            <a href="{% url 'timetable_delete' entry.pk %}" class="btn btn-sm btn-outline-danger border-0" onclick="return confirm('Are you sure you want to delete this scheduled exam slot?')" data-bs-toggle="tooltip" title="Delete">
+                                <i class="bi bi-trash fs-6"></i>
+                            </a>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-center py-4 text-muted">No examinations scheduled yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Schedule Exam Modal -->
+{% if user.profile.role in 'ADMIN EXAM_CONTROLLER' %}
+<div class="modal fade" id="scheduleExamModal" tabindex="-1" aria-labelledby="scheduleExamModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark-blue text-white">
+                <h5 class="modal-title fw-bold" id="scheduleExamModalLabel"><i class="bi bi-calendar-plus me-2 text-accent"></i>Schedule Examination Slot</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label for="exam" class="form-label fw-medium small text-muted mb-1">Select Examination Session</label>
+                        <select class="form-select" id="exam" name="exam" required>
+                            <option value="" disabled selected>Select Session</option>
+                            {% for exam in exams %}
+                            <option value="{{ exam.id }}">{{ exam.name }} ({{ exam.code }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label for="filter_dept" class="form-label fw-medium small text-muted mb-1">Filter by Department</label>
+                            <select class="form-select" id="filter_dept" onchange="filterModalSubjects()">
+                                <option value="all">All Departments</option>
+                                {% for dept in departments %}
+                                <option value="{{ dept.id }}">{{ dept.code }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label for="filter_sem" class="form-label fw-medium small text-muted mb-1">Filter by Semester</label>
+                            <select class="form-select" id="filter_sem" onchange="filterModalSubjects()">
+                                <option value="all">All Semesters</option>
+                                <option value="1">Semester 1</option>
+                                <option value="2">Semester 2</option>
+                                <option value="3">Semester 3</option>
+                                <option value="4">Semester 4</option>
+                                <option value="5">Semester 5</option>
+                                <option value="6">Semester 6</option>
+                                <option value="7">Semester 7</option>
+                                <option value="8">Semester 8</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="subject" class="form-label fw-medium small text-muted mb-1">Select Subject</label>
+                        <select class="form-select" id="subject" name="subject" required>
+                            <option value="" disabled selected>Select Subject</option>
+                            {% for sub in subjects %}
+                            <option value="{{ sub.id }}" data-dept="{{ sub.department.id }}" data-sem="{{ sub.semester }}">{{ sub.subject_code }} - {{ sub.subject_name }} ({{ sub.department.code }} - Sem {{ sub.semester }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="exam_date" class="form-label fw-medium small text-muted mb-1">Examination Date</label>
+                        <input type="date" class="form-control" id="exam_date" name="exam_date" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="session" class="form-label fw-medium small text-muted mb-1">Session</label>
+                        <select class="form-select" id="session" name="session" required>
+                            <option value="Morning">Morning (09:30 AM - 12:30 PM)</option>
+                            <option value="Afternoon">Afternoon (02:00 PM - 05:00 PM)</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label for="start_time" class="form-label fw-medium small text-muted mb-1">Start Time</label>
+                            <input type="time" class="form-control" id="start_time" name="start_time" value="09:30" required>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label for="end_time" class="form-label fw-medium small text-muted mb-1">End Time</label>
+                            <input type="time" class="form-control" id="end_time" name="end_time" value="12:30" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="attachment" class="form-label fw-medium small text-muted mb-1">Upload Timetable document (PDF/Image) (Optional)</label>
+                        <input type="file" class="form-control" id="attachment" name="attachment" accept="image/*,.pdf">
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-dark-blue text-white"><i class="bi bi-save me-2"></i>Schedule Exam</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function filterModalSubjects() {
+        var deptVal = document.getElementById('filter_dept').value;
+        var semVal = document.getElementById('filter_sem').value;
+        var select = document.getElementById('subject');
+        var options = select.options;
+        
+        // Reset current selection
+        select.value = "";
+        
+        for (var i = 0; i < options.length; i++) {
+            var opt = options[i];
+            if (opt.value === "") {
+                // Keep the placeholder visible
+                opt.style.display = "";
+                opt.disabled = false;
+                continue;
+            }
+            
+            var matchesDept = (deptVal === "all" || opt.getAttribute('data-dept') === deptVal);
+            var matchesSem = (semVal === "all" || opt.getAttribute('data-sem') === semVal);
+            
+            if (matchesDept && matchesSem) {
+                opt.style.display = "";
+                opt.disabled = false;
+            } else {
+                opt.style.display = "none";
+                opt.disabled = true;
+            }
+        }
+    }
+</script>
+{% endblock %}
